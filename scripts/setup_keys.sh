@@ -164,10 +164,7 @@ run_eval() {
         exit 1
     fi
     source "$KEYS_FILE"
-
-    echo -e "${BLUE}Running translation evaluation with available keys...${NC}"
-    echo ""
-
+    echo -e "${BLUE}Running translation evaluation...${NC}"
     python scripts/evaluate_translation_api.py \
         --openai_key    "$OPENAI_API_KEY" \
         --anthropic_key "$ANTHROPIC_API_KEY" \
