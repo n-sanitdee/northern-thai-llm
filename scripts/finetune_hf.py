@@ -1,21 +1,16 @@
+%%writefile scripts/finetune_hf.py
+
 """
 finetune_hf.py
 
-Pure HuggingFace + PEFT fine-tuning with integrated evaluation.
-After training, automatically evaluates checkpoints from different steps
-against the full 100-item test set and outputs gold + translation results.
-
-Research-grade pipeline:
-  1. Best checkpoint selection (load_best_model_at_end)
-  2. Full reproducibility (all seeds)
-  3. Generation samples every N steps (5 fixed sentences, linguistic trajectory)
-  4. Label masking — trains only on assistant response tokens
-  5. Deterministic generation for comparable snapshots
-  6. ChrF metric (not exact match)
-  7. Gradient clipping
-  8. Early stopping
-  9. Post-training evaluation: all saved checkpoints tested on full test set
-  10. Outputs gold standard + translated text side by side
+Pure HuggingFace + PEFT fine-tuning with integrated checkpoint evaluation.
+Fixes applied:
+  - Direction flag: evaluates NTD->STD and STD->NTD separately
+  - max_new_tokens increased to 256 for complete translations
+  - Whitespace normalization before ChrF scoring
+  - Prints only 10 sample translations in cell output, saves all 100 to file
+  - Dataset quality check: warns about rows where Gold == NTD (untranslated)
+  - Label masking, deterministic generation, ChrF metric, early stopping
 
 Usage:
     python scripts/finetune_hf.py --model typhoon2 --task multitask
@@ -27,6 +22,7 @@ import json
 import math
 import os
 import random
+import re
 import numpy as np
 import pandas as pd
 import torch
@@ -65,19 +61,42 @@ def set_seed(seed: int):
     torch.backends.cudnn.benchmark     = False
     os.environ["PYTHONHASHSEED"]       = str(seed)
 
+# ── Text normalization ────────────────────────────────────────────────────────
+
+def normalize_text(text: str) -> str:
+    """
+    Normalize whitespace before ChrF scoring.
+    Prevents extra spaces from artificially lowering scores.
+    e.g. 'กิน  ข้าว' -> 'กิน ข้าว'
+    ChrF is character-level so extra spaces do affect scores.
+    """
+    if not text:
+        return ""
+    # Collapse multiple spaces to single space
+    text = re.sub(r' +', ' ', text)
+    return text.strip()
+
+def compute_chrf(hypothesis: str, reference: str) -> float:
+    """ChrF score with whitespace normalization."""
+    chrf = ChrF()
+    h = normalize_text(hypothesis)
+    r = normalize_text(reference)
+    if not h or not r:
+        return 0.0
+    return round(chrf.corpus_score([h], [[r]]).score, 2)
+
 # ── Label masking ─────────────────────────────────────────────────────────────
 
 def mask_prompt_labels(input_ids: list, tokenizer) -> list:
     """
-    Mask all tokens except the assistant response with -100.
-    Model only learns to generate correct translations,
-    not to reproduce the system/user prompt.
+    Mask all tokens except assistant response with -100.
+    Model only learns to generate translations, not reproduce prompts.
     """
-    labels       = [-100] * len(input_ids)
-    marker       = "<|assistant|>"
-    marker_ids   = tokenizer.encode(marker, add_special_tokens=False)
-    marker_len   = len(marker_ids)
-    asst_start   = None
+    labels     = [-100] * len(input_ids)
+    marker     = "<|assistant|>"
+    marker_ids = tokenizer.encode(marker, add_special_tokens=False)
+    marker_len = len(marker_ids)
+    asst_start = None
 
     for i in range(len(input_ids) - marker_len):
         if input_ids[i:i + marker_len] == marker_ids:
@@ -87,8 +106,7 @@ def mask_prompt_labels(input_ids: list, tokenizer) -> list:
     if asst_start is not None:
         labels[asst_start:] = input_ids[asst_start:]
     else:
-        labels = input_ids.copy()  # fallback
-
+        labels = input_ids.copy()
     return labels
 
 def format_and_tokenize(example, tokenizer, max_length: int):
@@ -101,7 +119,6 @@ def format_and_tokenize(example, tokenizer, max_length: int):
             text += f"<|user|>\n{m['content']}\n"
         elif m["role"] == "assistant":
             text += f"<|assistant|>\n{m['content']}\n"
-
     tokenized = tokenizer(
         text, truncation=True, max_length=max_length, padding=False
     )
@@ -110,7 +127,7 @@ def format_and_tokenize(example, tokenizer, max_length: int):
 
 # ── Inference ─────────────────────────────────────────────────────────────────
 
-TRANSLATION_SYSTEM = (
+SYSTEM_NTD_TO_STD = (
     "You are a translation assistant specializing in Northern Thai dialect "
     "(ภาษาเหนือ / คำเมือง). "
     "Translate the given Northern Thai sentence into natural Standard Thai "
@@ -118,9 +135,20 @@ TRANSLATION_SYSTEM = (
     "Output only the translated sentence, nothing else."
 )
 
+SYSTEM_STD_TO_NTD = (
+    "You are a translation assistant specializing in Northern Thai dialect "
+    "(ภาษาเหนือ / คำเมือง). "
+    "Translate the given Standard Thai sentence into natural Northern Thai dialect "
+    "(ภาษาเหนือ). "
+    "Output only the translated sentence, nothing else."
+)
+
 def run_inference(model, tokenizer, system: str, user_msg: str,
-                  deterministic: bool = True,
-                  max_new_tokens: int = 128) -> str:
+                  max_new_tokens: int = 256) -> str:
+    """
+    Deterministic inference (do_sample=False) for reproducible outputs.
+    max_new_tokens=256 to ensure complete translations of longer sentences.
+    """
     prompt = (
         f"<|system|>\n{system}\n"
         f"<|user|>\n{user_msg}\n"
@@ -134,8 +162,7 @@ def run_inference(model, tokenizer, system: str, user_msg: str,
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=not deterministic,
-            temperature=0.1 if not deterministic else None,
+            do_sample=False,            # deterministic
             pad_token_id=tokenizer.eos_token_id,
         )
 
@@ -146,22 +173,26 @@ def run_inference(model, tokenizer, system: str, user_msg: str,
 
 # ── Output flag ───────────────────────────────────────────────────────────────
 
-def flag_output(ntd_input: str, output: str) -> str:
+def flag_output(source: str, output: str) -> str:
     if not output or output.strip() == "":
         return "EMPTY"
-    if output.strip() == ntd_input.strip():
+    if normalize_text(output) == normalize_text(source):
         return "ECHO"
     if not any('\u0e00' <= c <= '\u0e7f' for c in output):
         return "NO_THAI"
     if len(output.strip()) < 3:
         return "TOO_SHORT"
-    if len(output) > len(ntd_input) * 4:
+    # Truncated: output is much shorter than source and ends abruptly
+    if len(output) < len(source) * 0.3 and not output.endswith((".", "?", "!", "ค่ะ", "ครับ", "จ้าว", "เน้อ")):
+        return "TRUNCATED"
+    if len(output) > len(source) * 4:
         return "TOO_LONG"
     return "OK"
 
 # ── Generation sampler callback ───────────────────────────────────────────────
 
 SAMPLE_SENTENCES = [
+    # (NTD, STD gold)
     ("กิ๋นข้าวล่ะ",              "กินข้าวหรือยัง"),
     ("วันนี้อากาศหนาวแต้ๆ เน้อ", "วันนี้อากาศหนาวมากนะ"),
     ("ตี้ไหนมีน้ำขายพ้องจ้าว",   "ที่ไหนมีน้ำขายบ้าง"),
@@ -170,13 +201,9 @@ SAMPLE_SENTENCES = [
 ]
 
 class GenerationSamplerCallback(TrainerCallback):
-    """
-    Saves model translation outputs every N steps on 5 fixed sentences.
-    Uses deterministic generation for comparable snapshots.
-    Reports ChrF per snapshot for linguistic trajectory analysis.
-    """
-    def __init__(self, tokenizer, sample_sentences, output_dir,
-                 every_n_steps=50):
+    """Saves 5 fixed sentence translations every N steps for trajectory analysis."""
+
+    def __init__(self, tokenizer, sample_sentences, output_dir, every_n_steps=50):
         self.tokenizer        = tokenizer
         self.sample_sentences = sample_sentences
         self.output_dir       = output_dir
@@ -184,14 +211,12 @@ class GenerationSamplerCallback(TrainerCallback):
         os.makedirs(output_dir, exist_ok=True)
 
     def _generate(self, model, step: int) -> list:
-        chrf_metric = ChrF()
         model.eval()
         samples = []
-
         with torch.no_grad():
             for ntd, gold in self.sample_sentences:
                 prompt = (
-                    f"<|system|>\n{TRANSLATION_SYSTEM}\n"
+                    f"<|system|>\n{SYSTEM_NTD_TO_STD}\n"
                     f"<|user|>\nแปลประโยคภาษาเหนือต่อไปนี้เป็นภาษาไทยกลาง:\n{ntd}\n"
                     f"<|assistant|>\n"
                 )
@@ -199,12 +224,10 @@ class GenerationSamplerCallback(TrainerCallback):
                     prompt, return_tensors="pt",
                     truncation=True, max_length=256,
                 ).to(model.device)
-
                 try:
                     out = model.generate(
-                        **inputs,
-                        max_new_tokens=64,
-                        do_sample=False,            # deterministic
+                        **inputs, max_new_tokens=128,
+                        do_sample=False,
                         pad_token_id=self.tokenizer.eos_token_id,
                     )
                     decoded = self.tokenizer.decode(out[0], skip_special_tokens=True)
@@ -213,15 +236,13 @@ class GenerationSamplerCallback(TrainerCallback):
                 except Exception as e:
                     output = f"[ERROR: {str(e)[:40]}]"
 
-                chrf_score = chrf_metric.corpus_score([output], [[gold]]).score
                 samples.append({
                     "ntd_input":   ntd,
                     "gold":        gold,
                     "output":      output,
-                    "chrf":        round(chrf_score, 2),
-                    "exact_match": output.strip() == gold.strip(),
+                    "chrf":        compute_chrf(output, gold),
+                    "exact_match": normalize_text(output) == normalize_text(gold),
                 })
-
         model.train()
         return samples
 
@@ -247,11 +268,39 @@ class GenerationSamplerCallback(TrainerCallback):
                     "samples": samples,
                 }, f, ensure_ascii=False, indent=2)
 
-# ── Checkpoint evaluator ──────────────────────────────────────────────────────
+# ── Data quality check ────────────────────────────────────────────────────────
 
-def load_test_data(path: str) -> list:
-    """Load test JSONL and extract translation pairs."""
-    items = []
+def check_data_quality(test_data: list):
+    """
+    Warn about rows where gold == source (untranslated rows in dataset).
+    These are the rows where you copied NTD into the Gold column.
+    They inflate ECHO flags and lower ChrF scores misleadingly.
+    """
+    total      = len(test_data)
+    echo_count = sum(
+        1 for item in test_data
+        if normalize_text(item["gold"]) == normalize_text(item["source"])
+    )
+    if echo_count > 0:
+        pct = echo_count / total * 100
+        print(f"\n⚠ DATA QUALITY WARNING:")
+        print(f"  {echo_count}/{total} ({pct:.0f}%) test items have Gold == Source")
+        print(f"  These are untranslated rows (Gold was copied from NTD column)")
+        print(f"  They will show as ECHO in results and lower ChrF scores")
+        print(f"  Fix: complete the translations in your Excel before retraining\n")
+    else:
+        print(f"  Data quality: OK — no untranslated rows detected")
+
+# ── Test data loading ─────────────────────────────────────────────────────────
+
+def load_test_data(path: str) -> dict:
+    """
+    Load test JSONL and separate by translation direction.
+    Returns dict with keys 'ntd_to_std' and 'std_to_ntd'.
+    """
+    ntd_to_std = []
+    std_to_ntd = []
+
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -263,120 +312,136 @@ def load_test_data(path: str) -> list:
             user_msg = next(m["content"] for m in messages if m["role"] == "user")
             expected = next(m["content"] for m in messages if m["role"] == "assistant")
 
-            # Only keep translation tasks
-            if "แปลประโยคภาษาเหนือ" in user_msg or "ภาษาไทยกลาง" in user_msg:
-                # Extract just the NTD sentence from the user message
-                ntd = user_msg.split("\n")[-1].strip() if "\n" in user_msg else user_msg
-                items.append({
-                    "system":   system,
-                    "user_msg": user_msg,
-                    "ntd":      ntd,
-                    "gold":     expected,
+            # Detect translation direction from user prompt
+            if "แปลประโยคภาษาเหนือ" in user_msg:
+                # NTD -> STD direction
+                source = user_msg.split("\n")[-1].strip() \
+                         if "\n" in user_msg else user_msg
+                ntd_to_std.append({
+                    "direction": "NTD->STD",
+                    "system":    SYSTEM_NTD_TO_STD,
+                    "user_msg":  user_msg,
+                    "source":    source,
+                    "gold":      expected,
                 })
-    return items
+            elif "แปลประโยคภาษาไทยกลาง" in user_msg or "แปลประโยคนี้เป็นภาษาเหนือ" in user_msg:
+                # STD -> NTD direction
+                source = user_msg.split("\n")[-1].strip() \
+                         if "\n" in user_msg else user_msg
+                std_to_ntd.append({
+                    "direction": "STD->NTD",
+                    "system":    SYSTEM_STD_TO_NTD,
+                    "user_msg":  user_msg,
+                    "source":    source,
+                    "gold":      expected,
+                })
+
+    print(f"  NTD->STD items: {len(ntd_to_std)}")
+    print(f"  STD->NTD items: {len(std_to_ntd)}")
+    return {"ntd_to_std": ntd_to_std, "std_to_ntd": std_to_ntd}
+
+# ── Checkpoint evaluation ─────────────────────────────────────────────────────
 
 def evaluate_checkpoint(
     base_model_id: str,
     adapter_path:  str,
-    test_data:     list,
+    test_items:    list,
     label:         str,
     max_samples:   int = 100,
-) -> list:
+    print_samples: int = 10,      # how many to print in cell output
+) -> tuple:
     """
-    Load a checkpoint (base model + adapter) and run translation
-    on up to max_samples test items.
-    Returns list of result dicts with gold and output side by side.
+    Evaluate one checkpoint on test_items.
+    Prints only print_samples to terminal, saves all max_samples to file.
     """
     chrf_metric = ChrF()
     results     = []
-    test_data   = test_data[:max_samples]
+    items       = test_items[:max_samples]
 
     print(f"\n{'='*55}")
-    print(f"Evaluating: {label}")
-    print(f"Adapter:    {adapter_path}")
-    print(f"Items:      {len(test_data)}")
+    print(f"Checkpoint: {label}")
+    print(f"Items:      {len(items)} (printing {print_samples} to terminal)")
     print(f"{'='*55}")
 
-    # Load model
+    # Load model + adapter
     bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_use_double_quant=True,
+        load_in_4bit=True, bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
     )
     tokenizer = AutoTokenizer.from_pretrained(base_model_id)
     tokenizer.pad_token    = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
     model = AutoModelForCausalLM.from_pretrained(
-        base_model_id,
-        quantization_config=bnb_config,
-        device_map="auto",
-        torch_dtype=torch.float16,
+        base_model_id, quantization_config=bnb_config,
+        device_map="auto", torch_dtype=torch.float16,
     )
-
     if adapter_path and os.path.exists(adapter_path):
         model = PeftModel.from_pretrained(model, adapter_path)
     model.eval()
 
     hypotheses = []
     references = []
+    printed    = 0
 
-    for i, item in enumerate(test_data):
+    for i, item in enumerate(items):
         try:
             output = run_inference(
                 model, tokenizer,
                 system=item["system"],
                 user_msg=item["user_msg"],
-                deterministic=True,
-                max_new_tokens=128,
+                max_new_tokens=256,       # increased for complete translations
             )
-            f = flag_output(item["ntd"], output)
+            f = flag_output(item["source"], output)
         except Exception as e:
-            print(f"  [{i+1}] ERROR: {str(e)[:80]}")
             output = ""
             f      = "ERROR"
 
-        item_chrf = chrf_metric.corpus_score([output], [[item["gold"]]]).score \
-                    if output else 0.0
+        # Normalize before scoring
+        output_norm = normalize_text(output)
+        gold_norm   = normalize_text(item["gold"])
+        item_chrf   = compute_chrf(output_norm, gold_norm) if output else 0.0
 
-        flag_marker = f" [{f}]" if f not in ("OK",) else ""
-        print(f"  [{i+1:3d}/{len(test_data)}]{flag_marker}")
-        print(f"    NTD:   {item['ntd'][:65]}")
-        print(f"    Gold:  {item['gold'][:65]}")
-        print(f"    Model: {output[:65]}")
-        print(f"    ChrF:  {item_chrf:.1f}")
+        hypotheses.append(output_norm)
+        references.append(gold_norm)
 
-        hypotheses.append(output)
-        references.append(item["gold"])
+        # Print only first print_samples to terminal
+        if printed < print_samples:
+            flag_marker = f" [{f}]" if f != "OK" else ""
+            print(f"\n  [{i+1:3d}/{len(items)}]{flag_marker}")
+            print(f"    Source: {item['source'][:65]}")
+            print(f"    Gold:   {item['gold'][:65]}")
+            print(f"    Model:  {output[:65]}")
+            print(f"    ChrF:   {item_chrf:.1f}")
+            printed += 1
+        elif printed == print_samples:
+            print(f"\n  ... ({len(items) - print_samples} more saved to file)")
+            printed += 1  # prevent repeated message
 
         results.append({
             "checkpoint":  label,
-            "ntd_input":   item["ntd"],
-            "gold":        item["gold"],       # gold standard translation
-            "translation": output,             # model output
-            "chrf":        round(item_chrf, 2),
+            "direction":   item.get("direction", "NTD->STD"),
+            "source":      item["source"],
+            "gold":        item["gold"],
+            "translation": output,
+            "chrf":        item_chrf,
             "flag":        f,
-            # Human annotators fill these in:
             "human_score_accuracy":     None,
             "human_score_naturalness":  None,
             "human_score_dialect_loss": None,
             "human_notes":              "",
         })
 
-    # Corpus-level ChrF
-    valid_pairs = [(h, r) for h, r in zip(hypotheses, references) if h]
-    if valid_pairs:
-        h_valid, r_valid = zip(*valid_pairs)
-        corpus_chrf = chrf_metric.corpus_score(
-            list(h_valid), [list(r_valid)]
-        ).score
+    # Corpus ChrF
+    valid = [(h, r) for h, r in zip(hypotheses, references) if h]
+    if valid:
+        h_v, r_v = zip(*valid)
+        corpus_chrf = chrf_metric.corpus_score(list(h_v), [list(r_v)]).score
     else:
         corpus_chrf = 0.0
 
-    print(f"\n  Corpus ChrF ({len(valid_pairs)} valid): {corpus_chrf:.2f}")
+    print(f"\n  Corpus ChrF ({len(valid)}/{len(items)} valid): {corpus_chrf:.2f}")
 
-    # Free GPU memory
     del model
     torch.cuda.empty_cache()
 
@@ -385,35 +450,46 @@ def evaluate_checkpoint(
 def evaluate_all_checkpoints(
     base_model_id: str,
     run_dir:       str,
-    test_data:     list,
+    test_data:     dict,
     adapter_dir:   str,
     max_samples:   int = 100,
+    print_samples: int = 10,
+    direction:     str = "ntd_to_std",
 ):
     """
-    Evaluate all saved checkpoints + base model + best adapter.
-    Produces a results table showing translation quality across training steps.
+    Evaluate base model + all saved checkpoints + best adapter.
+    direction: 'ntd_to_std' or 'std_to_ntd' or 'both'
     """
+    test_items = []
+    if direction in ("ntd_to_std", "both"):
+        test_items.extend(test_data["ntd_to_std"])
+    if direction in ("std_to_ntd", "both"):
+        test_items.extend(test_data["std_to_ntd"])
+
+    if not test_items:
+        print(f"No test items found for direction: {direction}")
+        print("Check that prepare_data.py generated the correct task types")
+        return [], []
+
+    print(f"\nEvaluating direction: {direction} | {len(test_items)} items")
+    check_data_quality(test_items)
+
     all_results  = []
     summary_rows = []
 
-    # ── 1. Base model (no fine-tuning) ────────────────────────────────────────
+    # Base model
     base_results, base_chrf = evaluate_checkpoint(
-        base_model_id=base_model_id,
-        adapter_path=None,            # no adapter = base model
-        test_data=test_data,
-        label="Base (step 0)",
-        max_samples=max_samples,
+        base_model_id, None, test_items,
+        "Base (step 0)", max_samples, print_samples
     )
     all_results.extend(base_results)
     summary_rows.append({
-        "checkpoint": "Base (step 0)",
-        "step":       0,
-        "chrf":       round(base_chrf, 2),
-        "is_best":    False,
+        "checkpoint": "Base (step 0)", "step": 0,
+        "chrf": round(base_chrf, 2), "is_best": False,
+        "direction": direction,
     })
 
-    # ── 2. Intermediate checkpoints ───────────────────────────────────────────
-    # Find checkpoint folders saved during training
+    # Intermediate checkpoints
     checkpoints = []
     for name in sorted(os.listdir(run_dir)):
         if name.startswith("checkpoint-"):
@@ -425,35 +501,27 @@ def evaluate_all_checkpoints(
 
     for step, ckpt_path in sorted(checkpoints):
         results, ckpt_chrf = evaluate_checkpoint(
-            base_model_id=base_model_id,
-            adapter_path=ckpt_path,
-            test_data=test_data,
-            label=f"Checkpoint step {step}",
-            max_samples=max_samples,
+            base_model_id, ckpt_path, test_items,
+            f"Checkpoint step {step}", max_samples, print_samples
         )
         all_results.extend(results)
         summary_rows.append({
-            "checkpoint": f"Checkpoint step {step}",
-            "step":       step,
-            "chrf":       round(ckpt_chrf, 2),
-            "is_best":    False,
+            "checkpoint": f"Checkpoint step {step}", "step": step,
+            "chrf": round(ckpt_chrf, 2), "is_best": False,
+            "direction": direction,
         })
 
-    # ── 3. Best adapter (final saved) ─────────────────────────────────────────
+    # Best adapter
     if os.path.exists(adapter_dir):
         results, best_chrf = evaluate_checkpoint(
-            base_model_id=base_model_id,
-            adapter_path=adapter_dir,
-            test_data=test_data,
-            label="Best adapter (final)",
-            max_samples=max_samples,
+            base_model_id, adapter_dir, test_items,
+            "Best adapter (final)", max_samples, print_samples
         )
         all_results.extend(results)
         summary_rows.append({
-            "checkpoint": "Best adapter (final)",
-            "step":       999,
-            "chrf":       round(best_chrf, 2),
-            "is_best":    True,
+            "checkpoint": "Best adapter (final)", "step": 999,
+            "chrf": round(best_chrf, 2), "is_best": True,
+            "direction": direction,
         })
 
     return all_results, summary_rows
@@ -466,45 +534,42 @@ def save_evaluation_results(
 ):
     os.makedirs(output_dir, exist_ok=True)
 
-    # ── Full results JSONL ────────────────────────────────────────────────────
+    # Full JSONL
     jsonl_path = os.path.join(output_dir, "checkpoint_eval_results.jsonl")
     with open(jsonl_path, "w", encoding="utf-8") as f:
         for r in all_results:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    print(f"\nFull results -> {jsonl_path}")
+    print(f"\nFull results ({len(all_results)} rows) -> {jsonl_path}")
 
-    # ── Summary table ─────────────────────────────────────────────────────────
+    # Summary table
     summary_df = pd.DataFrame(summary_rows).sort_values("step")
-    summary_df["delta_from_base"] = (summary_df["chrf"] - base_chrf).round(2)
+    summary_df["delta"] = (summary_df["chrf"] - base_chrf).round(2)
 
     summary_path = os.path.join(output_dir, "checkpoint_eval_summary.csv")
     summary_df.to_csv(summary_path, index=False)
 
-    print(f"\n── ChrF across checkpoints ──────────────────────────────")
-    print(f"{'Checkpoint':<30} {'ChrF':>8} {'Delta':>8}")
-    print("-" * 50)
+    print(f"\n── ChrF across checkpoints ─────────────────────────")
+    print(f"  {'Checkpoint':<30} {'ChrF':>8} {'Delta':>8}")
+    print("  " + "-"*48)
     for _, row in summary_df.iterrows():
-        delta_str = f"{row['delta_from_base']:+.2f}" if row["step"] > 0 else "  —   "
+        delta_str = f"{row['delta']:+.2f}" if row["step"] > 0 else "    —"
         best_mark = " ← best" if row["is_best"] else ""
-        print(f"  {row['checkpoint']:<28} {row['chrf']:>8.2f} {delta_str:>8}{best_mark}")
+        print(f"  {row['checkpoint']:<30} {row['chrf']:>8.2f} {delta_str:>8}{best_mark}")
 
-    print(f"\nSummary -> {summary_path}")
+    print(f"\n  Summary -> {summary_path}")
 
-    # ── Side-by-side CSV (gold + translation) ─────────────────────────────────
-    # This is the main output for human evaluation and qualitative analysis
+    # Gold vs translation CSV (all 100 per checkpoint)
     df = pd.DataFrame(all_results)
-
     sidebyside_path = os.path.join(output_dir, "gold_vs_translation.csv")
     df[[
-        "checkpoint", "ntd_input", "gold", "translation",
+        "checkpoint", "direction", "source", "gold", "translation",
         "chrf", "flag",
         "human_score_accuracy", "human_score_naturalness",
         "human_score_dialect_loss", "human_notes",
     ]].to_csv(sidebyside_path, index=False, encoding="utf-8-sig")
-    print(f"Gold vs translation -> {sidebyside_path}")
+    print(f"  Gold vs translation -> {sidebyside_path}")
 
-    # ── Human eval sheet ──────────────────────────────────────────────────────
-    # Balanced sample: flagged items + OK items, across checkpoints
+    # Human eval sheet (best adapter only, flagged items prioritized)
     best_df  = df[df["checkpoint"] == "Best adapter (final)"]
     flagged  = best_df[~best_df["flag"].isin(["OK", "ERROR"])]
     ok_items = best_df[best_df["flag"] == "OK"]
@@ -519,36 +584,43 @@ def save_evaluation_results(
 
     if frames:
         human_eval = pd.concat(frames)[[
-            "checkpoint", "ntd_input", "gold", "translation", "flag",
-            "human_score_accuracy", "human_score_naturalness",
+            "checkpoint", "direction", "source", "gold", "translation",
+            "flag", "human_score_accuracy", "human_score_naturalness",
             "human_score_dialect_loss", "human_notes",
         ]]
         human_path = os.path.join(output_dir, "human_eval_sheet.csv")
         human_eval.to_csv(human_path, index=False, encoding="utf-8-sig")
-        print(f"Human eval sheet -> {human_path}")
+        print(f"  Human eval sheet -> {human_path}")
+        print(f"    ({n_flag} flagged + {n_ok} OK items)")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model",          choices=MODELS.keys(), default="typhoon2")
+    parser.add_argument("--model",            choices=MODELS.keys(), default="typhoon2")
     parser.add_argument("--task",
                         choices=["multitask", "translation"],
                         default="multitask")
-    parser.add_argument("--iters",          type=int,   default=300)
-    parser.add_argument("--batch_size",     type=int,   default=2)
-    parser.add_argument("--max_seq_length", type=int,   default=512)
-    parser.add_argument("--lr",             type=float, default=2e-4)
-    parser.add_argument("--lora_rank",      type=int,   default=8)
-    parser.add_argument("--sample_every",   type=int,   default=50)
-    parser.add_argument("--early_stopping", type=int,   default=3)
-    parser.add_argument("--eval_checkpoints", action="store_true", default=True,
-                        help="Evaluate all checkpoints on test set after training")
-    parser.add_argument("--max_eval_samples", type=int, default=100)
-    parser.add_argument("--test_data",      default="data/test.jsonl")
-    parser.add_argument("--data_dir",       default="data")
-    parser.add_argument("--output_dir",     default="outputs")
-    parser.add_argument("--seed",           type=int,   default=42)
+    parser.add_argument("--iters",            type=int,   default=300)
+    parser.add_argument("--batch_size",       type=int,   default=2)
+    parser.add_argument("--max_seq_length",   type=int,   default=512)
+    parser.add_argument("--lr",               type=float, default=2e-4)
+    parser.add_argument("--lora_rank",        type=int,   default=8)
+    parser.add_argument("--sample_every",     type=int,   default=50)
+    parser.add_argument("--early_stopping",   type=int,   default=3)
+    parser.add_argument("--eval_checkpoints", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--max_eval_samples", type=int,   default=100,
+                        help="Total items to evaluate per checkpoint (saved to file)")
+    parser.add_argument("--print_samples",    type=int,   default=10,
+                        help="How many translations to print in terminal output")
+    parser.add_argument("--eval_direction",
+                        choices=["ntd_to_std", "std_to_ntd", "both"],
+                        default="ntd_to_std",
+                        help="Which translation direction to evaluate")
+    parser.add_argument("--test_data",        default="data/test.jsonl")
+    parser.add_argument("--data_dir",         default="data")
+    parser.add_argument("--output_dir",       default="outputs")
+    parser.add_argument("--seed",             type=int,   default=42)
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -564,9 +636,10 @@ def main():
     os.makedirs(eval_dir,    exist_ok=True)
 
     print("="*60)
-    print(f"Model: {model_id}")
-    print(f"Task:  {args.task}")
-    print(f"Dir:   {run_dir}")
+    print(f"Model:     {model_id}")
+    print(f"Task:      {args.task}")
+    print(f"Direction: {args.eval_direction}")
+    print(f"Dir:       {run_dir}")
     print("="*60)
 
     if not torch.cuda.is_available():
@@ -578,10 +651,12 @@ def main():
     # Save config
     config = {
         "model_id": model_id, "task": args.task,
+        "eval_direction": args.eval_direction,
         "iters": args.iters, "batch_size": args.batch_size,
         "max_seq_length": args.max_seq_length, "lr": args.lr,
         "lora_rank": args.lora_rank, "lora_alpha": args.lora_rank * 2,
         "label_masking": True, "deterministic_generation": True,
+        "whitespace_normalization": True, "max_new_tokens": 256,
         "early_stopping_patience": args.early_stopping,
         "seed": args.seed, "gpu": torch.cuda.get_device_name(0),
         "timestamp": datetime.now().isoformat(),
@@ -589,7 +664,7 @@ def main():
     with open(os.path.join(run_dir, "run_config.json"), "w") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
-    # ── Load tokenizer and model ──────────────────────────────────────────────
+    # ── Load model ────────────────────────────────────────────────────────────
     print("\nLoading tokenizer and model...")
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     tokenizer.pad_token    = tokenizer.eos_token
@@ -682,8 +757,7 @@ def main():
     )
 
     trainer = Trainer(
-        model=model,
-        args=training_args,
+        model=model, args=training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
         data_collator=data_collator,
@@ -691,14 +765,14 @@ def main():
     )
 
     print(f"\nStarting training for {args.iters} steps...")
-    print(f"  Label masking:     ON")
-    print(f"  Generation:        deterministic")
-    print(f"  Checkpoint eval:   {'ON' if args.eval_checkpoints else 'OFF'}")
-    print(f"  Samples every:     {args.sample_every} steps\n")
+    print(f"  Label masking:      ON (trains only on assistant tokens)")
+    print(f"  Generation:         deterministic (do_sample=False)")
+    print(f"  Whitespace norm:    ON (ChrF normalized before scoring)")
+    print(f"  Max new tokens:     256 (for complete translations)")
+    print(f"  Samples every:      {args.sample_every} steps\n")
 
     trainer_stats = trainer.train()
 
-    # Summary
     best_ckpt    = trainer.state.best_model_checkpoint or "N/A"
     best_loss    = trainer.state.best_metric or 0.0
     perplexity   = math.exp(best_loss) if best_loss > 0 else 0.0
@@ -713,12 +787,11 @@ def main():
     print(f"Training loss:   {trainer_stats.training_loss:.4f}")
     print(f"Time:            {runtime_mins:.1f} minutes")
 
-    # Save best adapter
     print(f"\nSaving best adapter -> {adapter_dir}")
     model.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(adapter_dir)
 
-    # Compile generation trajectory
+    # Compile trajectory
     all_snapshots = []
     for fname in sorted(os.listdir(samples_dir)):
         if fname.endswith(".json"):
@@ -734,70 +807,63 @@ def main():
         bar = "█" * int(snap.get("avg_chrf", 0) / 5)
         print(f"  Step {snap['step']:4d}: {snap.get('avg_chrf', 0):5.1f} {bar}")
 
-    # Save training metrics
     metrics = {
         "model": args.model, "task": args.task,
-        "training_loss":  trainer_stats.training_loss,
-        "best_eval_loss": best_loss,
-        "perplexity":     round(perplexity, 2),
-        "best_checkpoint": best_ckpt,
-        "total_steps":    trainer_stats.global_step,
+        "training_loss": trainer_stats.training_loss,
+        "best_eval_loss": best_loss, "perplexity": round(perplexity, 2),
+        "best_checkpoint": best_ckpt, "total_steps": trainer_stats.global_step,
         "runtime_minutes": runtime_mins,
     }
     with open(os.path.join(run_dir, "training_metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
 
     # ── Post-training checkpoint evaluation ───────────────────────────────────
-    if args.eval_checkpoints:
+    if args.eval_checkpoints and os.path.exists(args.test_data):
         print("\n" + "="*60)
         print("POST-TRAINING CHECKPOINT EVALUATION")
         print("="*60)
-        print(f"Testing all checkpoints on {args.max_eval_samples} test items")
-        print("Each checkpoint translates the full test set.")
-        print("Gold standard and model translations saved side by side.\n")
+        print(f"Direction:     {args.eval_direction}")
+        print(f"Items saved:   {args.max_eval_samples} per checkpoint")
+        print(f"Items printed: {args.print_samples} per checkpoint\n")
 
-        # Free training model from GPU first
         del model
         torch.cuda.empty_cache()
 
-        # Load test data (translation items only)
-        if not os.path.exists(args.test_data):
-            print(f"Test data not found: {args.test_data} — skipping evaluation")
-        else:
-            test_data = load_test_data(args.test_data)
-            print(f"Loaded {len(test_data)} translation test items")
+        print("Loading test data...")
+        test_data = load_test_data(args.test_data)
 
-            all_eval_results, summary_rows = evaluate_all_checkpoints(
-                base_model_id=model_id,
-                run_dir=run_dir,
-                test_data=test_data,
-                adapter_dir=adapter_dir,
-                max_samples=args.max_eval_samples,
-            )
+        all_eval, summary_rows = evaluate_all_checkpoints(
+            base_model_id=model_id,
+            run_dir=run_dir,
+            test_data=test_data,
+            adapter_dir=adapter_dir,
+            max_samples=args.max_eval_samples,
+            print_samples=args.print_samples,
+            direction=args.eval_direction,
+        )
 
-            base_chrf = next(
-                r["chrf"] for r in summary_rows if r["step"] == 0
-            )
-            save_evaluation_results(
-                all_eval_results, summary_rows, eval_dir, base_chrf
-            )
+        if summary_rows:
+            base_chrf = next(r["chrf"] for r in summary_rows if r["step"] == 0)
+            save_evaluation_results(all_eval, summary_rows, eval_dir, base_chrf)
 
-    # ── Final output summary ──────────────────────────────────────────────────
+    elif args.eval_checkpoints:
+        print(f"\nTest data not found at {args.test_data} — skipping evaluation")
+
+    # ── Final summary ─────────────────────────────────────────────────────────
     print("\n" + "="*60)
     print("ALL OUTPUTS")
     print("="*60)
-    print(f"\nTraining outputs -> {run_dir}/")
+    print(f"\n{run_dir}/")
     print(f"  adapters/                    <- best LoRA weights")
-    print(f"  generation_samples/          <- translation snapshots per step")
-    print(f"  generation_trajectory.json   <- compiled learning trajectory")
+    print(f"  generation_samples/          <- 5-sentence snapshots every {args.sample_every} steps")
+    print(f"  generation_trajectory.json   <- learning trajectory")
     print(f"  training_metrics.json        <- loss, perplexity, runtime")
-    print(f"  run_config.json              <- hyperparameters")
-    if args.eval_checkpoints:
-        print(f"\nEvaluation outputs -> {eval_dir}/")
-        print(f"  checkpoint_eval_results.jsonl  <- all checkpoint results")
-        print(f"  checkpoint_eval_summary.csv    <- ChrF per checkpoint")
-        print(f"  gold_vs_translation.csv        <- gold + translation side by side")
-        print(f"  human_eval_sheet.csv           <- sheet for annotators")
+    print(f"  run_config.json              <- all hyperparameters")
+    print(f"\n{eval_dir}/")
+    print(f"  checkpoint_eval_summary.csv  <- ChrF per checkpoint (goes in paper)")
+    print(f"  gold_vs_translation.csv      <- all 100 items: source | gold | translation")
+    print(f"  human_eval_sheet.csv         <- 30 items for native speaker annotation")
+    print(f"  checkpoint_eval_results.jsonl <- full raw results")
     print(f"\nDownload {run_dir}/ from Kaggle Output panel before session ends.")
 
 if __name__ == "__main__":
