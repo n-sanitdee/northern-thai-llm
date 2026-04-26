@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lanna Codenames — Lanna-3L Framework</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #faf7f2;
+    --bg-warm:   #f4ede0;
+    --bg-card:   #ffffff;
+    --ink:       #1a1410;
+    --ink-soft:  #5a4a3a;
+    --ink-dim:   #9a8a7a;
+    --rule:      #e8ddd0;
+    --rule-2:    #d4c8b8;
+
+    --gold:      #b8862a;
+    --gold-bg:   #fdf8ee;
+    --gold-rule: #e8d4a0;
+
+    --teal:      #2a7a6a;
+    --teal-bg:   #eef6f4;
+    --teal-rule: #a0d4ca;
+
+    --rust:      #8a3a2a;
+    --rust-bg:   #faf0ec;
+    --rust-rule: #d4a898;
+
+    --slate:     #3a4a6a;
+    --slate-bg:  #eef0f6;
+    --slate-rule:#a8b4d4;
+
+    --meta:      #5a4a7a;
+    --meta-bg:   #f4f0f8;
+    --meta-rule: #c4b4d8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 17px;
+  }
+
+  /* ── ornamental rule ── */
+  .ornament {
+    text-align: center;
+    color: var(--ink-dim);
+    letter-spacing: 0.3em;
+    font-size: 0.75rem;
+    margin: 1.5rem 0;
+    opacity: 0.5;
+  }
+
+  /* ── hero ── */
+  .hero {
+    background: var(--ink);
+    color: var(--bg);
+    padding: 5rem 4rem 4rem;
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 70% 60% at 30% 50%, rgba(184,134,42,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 80% at 80% 30%, rgba(42,122,106,0.10) 0%, transparent 60%);
+  }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1.2rem;
+    position: relative;
+  }
+  .hero h1 {
+    font-size: 3.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-bottom: 0.5rem;
+    position: relative;
+  }
+  .hero h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: rgba(255,255,255,0.55);
+  }
+  .hero-thai {
+    font-family: 'Noto Serif Thai', serif;
+    font-size: 1.2rem;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 1.6rem;
+    letter-spacing: 0.08em;
+    position: relative;
+  }
+  .hero-desc {
+    max-width: 60ch;
+    margin: 0 auto 2rem;
+    font-size: 1rem;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.7;
+    position: relative;
+    font-style: italic;
+  }
+  .hero-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 0.08em;
+    position: relative;
+  }
+
+  /* ── main layout ── */
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 4rem 3rem;
+  }
+
+  /* ── section headers ── */
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--ink-dim);
+    letter-spacing: 0.1em;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .section-thai {
+    font-family: 'Noto Serif Thai', serif;
+    font-size: 1.1rem;
+    color: var(--ink-dim);
+    font-weight: 400;
+    margin-left: auto;
+  }
+  .section-desc {
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-bottom: 1.8rem;
+    max-width: 70ch;
+  }
+
+  section { margin-bottom: 4.5rem; }
+
+  /* ── package cards (big 3) ── */
+  .package-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.2rem;
+    margin-bottom: 1.5rem;
+  }
+  .package-card {
+    border-radius: 8px;
+    padding: 1.8rem 1.6rem;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid;
+  }
+  .package-card::after {
+    content: attr(data-thai);
+    font-family: 'Noto Serif Thai', serif;
+    font-size: 4rem;
+    position: absolute;
+    bottom: -0.5rem;
+    right: 0.5rem;
+    opacity: 0.06;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .pkg-a { background: var(--gold-bg); border-color: var(--gold-rule); }
+  .pkg-b { background: var(--teal-bg); border-color: var(--teal-rule); }
+  .pkg-c { background: var(--rust-bg); border-color: var(--rust-rule); }
+
+  .pkg-layer {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  .pkg-a .pkg-layer { color: var(--gold); }
+  .pkg-b .pkg-layer { color: var(--teal); }
+  .pkg-c .pkg-layer { color: var(--rust); }
+
+  .pkg-name-en {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 0.1rem;
+    letter-spacing: -0.01em;
+  }
+  .pkg-name-thai {
+    font-family: 'Noto Serif Thai', serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+  }
+  .pkg-a .pkg-name-thai { color: var(--gold); }
+  .pkg-b .pkg-name-thai { color: var(--teal); }
+  .pkg-c .pkg-name-thai { color: var(--rust); }
+
+  .pkg-roman {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--ink-dim);
+    margin-bottom: 0.8rem;
+  }
+  .pkg-meaning {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-bottom: 0.8rem;
+    line-height: 1.5;
+  }
+  .pkg-cultural {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    border-top: 1px solid;
+    padding-top: 0.8rem;
+    margin-top: 0.8rem;
+  }
+  .pkg-a .pkg-cultural { border-color: var(--gold-rule); }
+  .pkg-b .pkg-cultural { border-color: var(--teal-rule); }
+  .pkg-c .pkg-cultural { border-color: var(--rust-rule); }
+
+  .pkg-cli {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    padding: 3px 8px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-top: 0.6rem;
+  }
+  .pkg-a .pkg-cli { background: rgba(184,134,42,0.12); color: var(--gold); }
+  .pkg-b .pkg-cli { background: rgba(42,122,106,0.12); color: var(--teal); }
+  .pkg-c .pkg-cli { background: rgba(138,58,42,0.12); color: var(--rust); }
+
+  /* ── meta + runner cards ── */
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem;
+    margin-top: 1.2rem;
+  }
+  .meta-card {
+    background: var(--meta-bg);
+    border: 1px solid var(--meta-rule);
+    border-radius: 8px;
+    padding: 1.4rem 1.6rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .meta-card::after {
+    content: attr(data-thai);
+    font-family: 'Noto Serif Thai', serif;
+    font-size: 3rem;
+    position: absolute;
+    bottom: -0.2rem;
+    right: 0.5rem;
+    opacity: 0.07;
+    pointer-events: none;
+    line-height: 1;
+  }
+  .runner-card {
+    background: var(--slate-bg);
+    border: 1px solid var(--slate-rule);
+  }
+  .meta-card .pkg-layer { color: var(--meta); }
+  .meta-card .pkg-name-thai { color: var(--meta); }
+  .meta-card .pkg-cli { background: rgba(90,74,122,0.1); color: var(--meta); }
+  .runner-card .pkg-layer { color: var(--slate); }
+  .runner-card .pkg-name-thai { color: var(--slate); }
+  .runner-card .pkg-cli { background: rgba(58,74,106,0.1); color: var(--slate); }
+  .meta-card .pkg-cultural { border-color: var(--meta-rule); }
+  .runner-card .pkg-cultural { border-color: var(--slate-rule); }
+
+  /* ── module table ── */
+  .module-section {
+    margin-bottom: 2.5rem;
+  }
+  .module-layer-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.7rem;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 1rem;
+  }
+  .lbl-a { background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-rule); }
+  .lbl-b { background: var(--teal-bg); color: var(--teal); border: 1px solid var(--teal-rule); }
+  .lbl-c { background: var(--rust-bg); color: var(--rust); border: 1px solid var(--rust-rule); }
+  .lbl-meta { background: var(--meta-bg); color: var(--meta); border: 1px solid var(--meta-rule); }
+
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 0.8rem;
+  }
+  .module-card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    position: relative;
+  }
+  .module-card:hover {
+    border-color: var(--rule-2);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .mod-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+  .mod-name-thai {
+    font-family: 'Noto Serif Thai', serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .mod-name-en {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--ink-dim);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .mod-roman {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--ink-dim);
+    margin-bottom: 0.5rem;
+  }
+  .mod-file {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    background: var(--bg-warm);
+    padding: 2px 7px;
+    border-radius: 3px;
+    color: var(--ink-soft);
+    margin-bottom: 0.6rem;
+    display: inline-block;
+  }
+  .mod-desc {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    font-style: italic;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.5rem;
+    margin-top: 0.4rem;
+  }
+  .mod-function {
+    font-size: 0.78rem;
+    color: var(--ink-dim);
+    margin-top: 0.3rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* layer-specific name colours */
+  .mod-a .mod-name-thai { color: var(--gold); }
+  .mod-b .mod-name-thai { color: var(--teal); }
+  .mod-c .mod-name-thai { color: var(--rust); }
+  .mod-meta .mod-name-thai { color: var(--meta); }
+
+  /* ── CLI example ── */
+  .cli-showcase {
+    background: var(--ink);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1.5rem 0;
+  }
+  .cli-titlebar {
+    background: rgba(255,255,255,0.05);
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .cli-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .cli-dot.r { background: #ff5f56; }
+  .cli-dot.y { background: #ffbd2e; }
+  .cli-dot.g { background: #27c93f; }
+  .cli-titlebar-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    color: rgba(255,255,255,0.2);
+    margin-left: auto;
+    letter-spacing: 0.08em;
+  }
+  .cli-body {
+    padding: 1.4rem 1.6rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 2;
+    color: rgba(255,255,255,0.45);
+  }
+  .cli-body .cmt { color: rgba(255,255,255,0.2); }
+  .cli-body .prompt { color: var(--gold); }
+  .cli-body .cmd-a { color: #c8a84b; }
+  .cli-body .cmd-b { color: #4a9e7a; }
+  .cli-body .cmd-c { color: #c07060; }
+  .cli-body .cmd-meta { color: #9a8acc; }
+  .cli-body .arg { color: rgba(255,255,255,0.6); }
+  .cli-body .out { color: rgba(255,255,255,0.25); font-style: italic; }
+  .cli-body .out-ok { color: #4a9e7a; }
+  .cli-body .out-tick { color: #27c93f; }
+
+  /* ── index table ── */
+  .alpha-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+  .alpha-table thead th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    text-align: left;
+    padding: 0.5rem 0.8rem;
+    border-bottom: 2px solid var(--rule-2);
+    background: var(--bg-warm);
+  }
+  .alpha-table tbody td {
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: middle;
+  }
+  .alpha-table tbody tr:last-child td { border-bottom: none; }
+  .alpha-table .td-thai {
+    font-family: 'Noto Serif Thai', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+  .alpha-table .td-roman {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+  }
+  .alpha-table .td-file {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--ink-dim);
+    background: var(--bg-warm);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .alpha-table .td-role { color: var(--ink-soft); font-style: italic; }
+  .tag-a { color: var(--gold); }
+  .tag-b { color: var(--teal); }
+  .tag-c { color: var(--rust); }
+  .tag-meta { color: var(--meta); }
+
+  /* ── callout ── */
+  .callout {
+    background: var(--bg-warm);
+    border-left: 3px solid var(--rule-2);
+    padding: 1rem 1.3rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin: 1.5rem 0;
+  }
+  .callout strong { color: var(--ink); font-style: normal; }
+
+  /* ── glossary note ── */
+  .placement-box {
+    border: 1px solid var(--rule-2);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 1.5rem;
+  }
+  .placement-row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    border-bottom: 1px solid var(--rule);
+  }
+  .placement-row:last-child { border-bottom: none; }
+  .placement-venue {
+    background: var(--bg-warm);
+    padding: 0.9rem 1rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    border-right: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+  }
+  .placement-content {
+    padding: 0.9rem 1.2rem;
+    font-size: 0.84rem;
+    color: var(--ink-soft);
+    line-height: 1.55;
+  }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-eyebrow">Lanna-3L Framework · Internal Codename System</div>
+  <h1>Lanna Codenames<br><em>A Living Tribute in Code</em></h1>
+  <div class="hero-thai">ชื่อรหัสล้านนา · Lanna-3L</div>
+  <p class="hero-desc">Every internal module, package, and CLI command carries an authentic Northern Thai name — drawn from traditional craft, ceremony, and community life. The software is built on Lanna soil.</p>
+  <div class="hero-note">Public API names (LannaBase · LannaAdapt-s · LannaEval) remain unchanged · Internal use only</div>
+</header>
+
+<main>
+
+  <!-- 1. Layer Packages & CLI -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 1</span>
+      <span class="section-title">Layer Packages & CLI Commands</span>
+      <span class="section-thai">ชั้นและคำสั่ง</span>
+    </div>
+    <p class="section-desc">Each layer takes the name of a Lanna place, space, or craft tradition — the metaphor running through every import and command the developer types.</p>
+
+    <div class="package-grid">
+
+      <div class="package-card pkg-a" data-thai="ข่วง">
+        <div class="pkg-layer">Layer A · lanna_khuang/</div>
+        <div class="pkg-name-thai">ข่วง</div>
+        <div class="pkg-roman">Khuang</div>
+        <div class="pkg-meaning">"Royal Courtyard"</div>
+        <div class="pkg-cultural">The ข่วงหลวง is the open central courtyard before a temple or palace — the foundational gathering space where community begins all important activity. Raw materials are laid out here, organised, and prepared.<br><br>Layer A is where the raw master sheet is laid out, organised, and built into JSONL. Everything downstream begins here.</div>
+        <span class="pkg-cli">$ lanna-khuang</span>
+      </div>
+
+      <div class="package-card pkg-b" data-thai="ครัวไฟ">
+        <div class="pkg-layer">Layer B · lanna_kruafai/</div>
+        <div class="pkg-name-thai">ครัวไฟ</div>
+        <div class="pkg-roman">Krua Fai</div>
+        <div class="pkg-meaning">"Traditional Kitchen · The Fire Kitchen"</div>
+        <div class="pkg-cultural">The ครัวไฟ is the heart of the Lanna home — not just a cooking room but a spiritual and architectural centre. Transformation happens here through fire and skill. Raw ingredients become meals; heat shapes everything.<br><br>Layer B is where raw models are transformed: zero-shot, few-shot, LoRA fine-tuning. The GPU is the fire.</div>
+        <span class="pkg-cli">$ lanna-kruafai</span>
+      </div>
+
+      <div class="package-card pkg-c" data-thai="จ่อฟ้า">
+        <div class="pkg-layer">Layer C · lanna_jorfa/</div>
+        <div class="pkg-name-thai">จ่อฟ้า</div>
+        <div class="pkg-roman">Jor Fa</div>
+        <div class="pkg-meaning">"Sky Finial · Temple Roof Spire"</div>
+        <div class="pkg-cultural">จ่อฟ้า is the elegant finial atop a Lanna viharn, often carved as a naga. It reaches skyward, connecting earth to the highest realms — a measuring rod of sacred aspiration.<br><br>Layer C reaches upward to measure model outputs against ideal benchmarks. Its diagnostic stack connects the earthly generation to the heaven of perfect accuracy.</div>
+        <span class="pkg-cli">$ lanna-jorfa</span>
+      </div>
+
+    </div>
+
+    <div class="meta-grid">
+
+      <div class="meta-card" data-thai="แอ๊บ">
+        <div class="pkg-layer">Meta Package · ab_meta/</div>
+        <div class="pkg-name-thai">แอ๊บ</div>
+        <div class="pkg-roman">Ab</div>
+        <div class="pkg-meaning">"Small Lidded Container"</div>
+        <div class="pkg-cultural">แอ๊บ is a small to medium lidded container used in everyday Lanna life for storing snacks and personal items. It has a removable lid — accessible, portable, essential.<br><br>ab_meta holds all shared utilities: schemas, manifest, seed manager, I/O, orchestration. The common tools everyone reaches for.</div>
+      </div>
+
+      <div class="meta-card runner-card" data-thai="ฟ้อน">
+        <div class="pkg-layer">Pipeline Runner · lanna-fon</div>
+        <div class="pkg-name-thai">ฟ้อน</div>
+        <div class="pkg-roman">Fon</div>
+        <div class="pkg-meaning">"Traditional Lanna Folk Dance"</div>
+        <div class="pkg-cultural">ฟ้อน is the overarching term for traditional Lanna dance — slow, graceful, and serene, reflecting the gentle character of Northern people. Each movement flows seamlessly into the next.<br><br>The pipeline runner orchestrates all layers in sequence. Each step flows into the next with grace. <span style="font-family:'JetBrains Mono',monospace;font-size:0.7rem">lanna-fon run --pipeline paper1_full.yaml</span></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 2. Layer A Modules -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 2</span>
+      <span class="section-title">Layer A Modules</span>
+      <span class="section-thai">ข่วง · Data Foundation</span>
+    </div>
+    <p class="section-desc">Forge tools from Lanna material culture — the act of building, weaving, splitting, coating, and marking.</p>
+    <span class="module-layer-label lbl-a">lanna_khuang/ · formerly lannaforge</span>
+
+    <div class="module-grid">
+
+      <div class="module-card mod-a">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">สลุง</div>
+            <div class="mod-roman">Salung · Water Bowl</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Anvil</div>
+        </div>
+        <div class="mod-file">salung_builder.py</div>
+        <div class="mod-desc">A traditional Lanna water bowl, often silver or lacquerware, used in rituals for welcoming guests. As the salung holds and presents pure water, this module holds raw sheet data and presents a clean, structured JSONL corpus to all downstream layers.</div>
+        <div class="mod-function">→ builds JSONL from master sheet</div>
+      </div>
+
+      <div class="module-card mod-a">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">หูก</div>
+            <div class="mod-roman">Huuk · Loom</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Loom</div>
+        </div>
+        <div class="mod-file">huuk_validator.py</div>
+        <div class="mod-desc">The traditional Lanna floor loom for weaving textiles. Just as the loom weaves threads into consistent cloth, หูก weaves consistency checks through the JSONL — every row must follow the correct thread.</div>
+        <div class="mod-function">→ validates JSONL schema</div>
+      </div>
+
+      <div class="module-card mod-a">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ตอก</div>
+            <div class="mod-roman">Tok · Bamboo Strip</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Cleaver</div>
+        </div>
+        <div class="mod-file">tok_splitter.py</div>
+        <div class="mod-desc">Bamboo strips used in Lanna basketry; also the tool that splits bamboo cleanly into even strips. ตอก partitions the dataset into train/dev/test — cutting the data into clean, even pieces, like splitting bamboo for weaving.</div>
+        <div class="mod-function">→ stratified train/dev/test partitioner</div>
+      </div>
+
+      <div class="module-card mod-a">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">รัก</div>
+            <div class="mod-roman">Rak · Lacquer</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Quill</div>
+        </div>
+        <div class="mod-file">rak_annotator.py</div>
+        <div class="mod-desc">Lacquer from the rak tree — applied in layers to coat and preserve Lanna lacquerware. รัก applies the annotation codebook to each row, coating raw data with a durable layer of pragmatic meaning, preserving intent, tone, and construction type.</div>
+        <div class="mod-function">→ annotation codebook applicator</div>
+      </div>
+
+      <div class="module-card mod-a">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ตุง</div>
+            <div class="mod-roman">Tung · Ritual Flag</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Compass</div>
+        </div>
+        <div class="mod-file">tung_definer.py</div>
+        <div class="mod-desc">A Lanna Buddhist ritual banner, planted to mark direction and aspiration. ตุง plants flags that mark the semantic directions of the benchmark — the 7-field LannaFacets schema (intent, tone, construction type, code-switch, data type, context dependence, location).</div>
+        <div class="mod-function">→ LannaFacets field definitions (single source of truth)</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 3. Layer B Modules -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 3</span>
+      <span class="section-title">Layer B Modules</span>
+      <span class="section-thai">ครัวไฟ · Adaptation</span>
+    </div>
+    <p class="section-desc">Smithy tools — the registry, the stencil, the hammer, and the garment that wraps the model.</p>
+    <span class="module-layer-label lbl-b">lanna_kruafai/ · formerly lannasmith</span>
+
+    <div class="module-grid">
+
+      <div class="module-card mod-b">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ขันโตก</div>
+            <div class="mod-roman">Khan Tok · Serving Bowl</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Roster</div>
+        </div>
+        <div class="mod-file">khantok_registry.py</div>
+        <div class="mod-desc">A traditional Lanna low-footed serving bowl used to hold multiple dishes on a single tray — gathering, offering, and communal sharing. ขันโตก holds the 9-model registry: each model is a dish, presented together for the adaptation matrix.</div>
+        <div class="mod-function">→ 9-model registry (dict[str, ModelSpec])</div>
+      </div>
+
+      <div class="module-card mod-b">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ฉลุ</div>
+            <div class="mod-roman">Chalu · Carved Stencil</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Stencil</div>
+        </div>
+        <div class="mod-file">chalu_templater.py</div>
+        <div class="mod-desc">A cut-out stencil pattern used in Lanna wood and metal decoration. ฉลุ constructs prompts from templates — it cuts the fixed pattern, leaving placeholders to be filled with context. The only place prompts are built.</div>
+        <div class="mod-function">→ prompt templating (system + few-shot assembly)</div>
+      </div>
+
+      <div class="module-card mod-b">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">มุย</div>
+            <div class="mod-roman">Mui · Hammer</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Forgehammer</div>
+        </div>
+        <div class="mod-file">mui_inference/</div>
+        <div class="mod-desc">A traditional hammer used in Lanna silver and metalcraft. มุย runs inference — it strikes the model to produce outputs, shaping the raw input into a finished generation. Covers both frontier APIs (OpenAI, Anthropic, Google, DeepSeek) and open-weights via vLLM.</div>
+        <div class="mod-function">→ inference runner · api.py + vllm.py</div>
+      </div>
+
+      <div class="module-card mod-b">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ซิ่น</div>
+            <div class="mod-roman">Sin · Traditional Skirt</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Bellows</div>
+        </div>
+        <div class="mod-file">sin_finetuner.py</div>
+        <div class="mod-desc">The ซิ่น is the traditional Lanna tubular skirt, woven with intricate patterns — a symbol of Lanna identity. ซิ่น fine-tunes the LoRA adapter: it weaves new patterns (adaptation) into the base fabric (Typhoon2) without re-weaving the entire garment. Paper 1: r=8, α=16.</div>
+        <div class="mod-function">→ LoRA fine-tuner · PEFT + TRL · Typhoon2 only (Paper 1)</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 4. Layer C Modules -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 4</span>
+      <span class="section-title">Layer C Modules</span>
+      <span class="section-thai">จ่อฟ้า · Evaluation</span>
+    </div>
+    <p class="section-desc">Scientific instruments — measuring, affirming, aggregating, and catching what falls through.</p>
+    <span class="module-layer-label lbl-c">lanna_jorfa/ · formerly lannascope</span>
+
+    <h4 style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--ink-dim);letter-spacing:0.1em;margin:1rem 0 0.8rem;text-transform:uppercase;">① Automatic Diagnostics</h4>
+    <div class="module-grid">
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">สาธุ</div>
+            <div class="mod-roman">Sathu · Amen / Acclamation</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Trident</div>
+        </div>
+        <div class="mod-file">sathu_robustness.py</div>
+        <div class="mod-desc">A Pali-derived word used as "amen" in Lanna Buddhist chanting — an expression of agreement and affirmation, spoken three times. สาธุ runs the 3P Prompt Robustness protocol, affirming three prompt variations as valid tests. Three affirmations, three prompts.</div>
+        <div class="mod-function">→ 3P prompt robustness harness</div>
+      </div>
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ไตรภูมิ</div>
+            <div class="mod-roman">Trai Phum · Three Realms</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Triplet</div>
+        </div>
+        <div class="mod-file">traiphum_multiref.py</div>
+        <div class="mod-desc">The traditional Lanna/Thai Buddhist cosmology of three realms (heaven, earth, underworld). ไตรภูมิ scores each hypothesis against three references — measuring the distance across three realms of possible correct translations (3 hyp × 3 refs = 9 ChrF values).</div>
+        <div class="mod-function">→ Lanna MultiRef scorer via sacrebleu.sentence_chrf</div>
+      </div>
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">แก้ว</div>
+            <div class="mod-roman">Kaew · Crystal</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Prism</div>
+        </div>
+        <div class="mod-file">kaew_aggregator.py</div>
+        <div class="mod-desc">Crystal or gemstone — clear and refractive. แก้ว aggregates 9 ChrF values into the three-number Triple-ChrF: chrf_max (optimistic ceiling), chrf_avg (expected performance), chrf_diff (prompt sensitivity). Like a prism, it refracts raw scores into a meaningful spectrum.</div>
+        <div class="mod-function">→ Triple-ChrF aggregator · {chrf_max, chrf_avg, chrf_diff}</div>
+      </div>
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ป่อง</div>
+            <div class="mod-roman">Pong · Gap / Interval</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Caliper</div>
+        </div>
+        <div class="mod-file">pong_gap.py</div>
+        <div class="mod-desc">In Lanna, ป่อง refers to a gap, cleft, or interval — the space between woven bamboo slices. ป่อง computes the Dialect Gap Score G = chrf_avg(STD) − chrf_avg(NTD), measuring the interval between standard and dialect performance per model.</div>
+        <div class="mod-function">→ Dialect Gap Score G (headline metric)</div>
+      </div>
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">แตะ</div>
+            <div class="mod-roman">Tae · Woven Bamboo Panel</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Lattice</div>
+        </div>
+        <div class="mod-file">tae_slicer.py</div>
+        <div class="mod-desc">A woven bamboo panel made from split strips — used as fencing, walls, or a drying rack (e.g., for tobacco). The gaps allow airflow. แตะ spreads scores across its grid of LannaFacets metadata — each gap between strips is a distinct facet cell (e.g., tone=polite_female), preventing mixing between categories.</div>
+        <div class="mod-function">→ LannaFacets slice analyzer (7 metadata axes)</div>
+      </div>
+
+    </div>
+
+    <h4 style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--ink-dim);letter-spacing:0.1em;margin:1.5rem 0 0.8rem;text-transform:uppercase;">② Human Diagnostics</h4>
+    <div class="module-grid">
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ใบลาน</div>
+            <div class="mod-roman">Bai Lan · Palm-Leaf Manuscript</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Slate</div>
+        </div>
+        <div class="mod-file">bailan_form.py</div>
+        <div class="mod-desc">The traditional medium for recording Lanna scripture, legal texts, and chronicles — a blank surface awaiting inscription. ใบลาน generates human evaluation forms for annotators: a blank slate for recording judgments on generation quality, fluency, and the four extended Likert axes.</div>
+        <div class="mod-function">→ human eval form generator (HTML or Label Studio)</div>
+      </div>
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ฮอมปอย</div>
+            <div class="mod-roman">Hom Poi · Communal Contribution</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Concord</div>
+        </div>
+        <div class="mod-file">hompoi_agreement.py</div>
+        <div class="mod-desc">ฮอม = to gather/donate together · ปอย = a merit-making festival. Hom Poi is the Lanna tradition of villagers pooling resources for a communal goal — money, rice, or labour. "Who helps us, we go help them." ฮอมปอย measures how well annotators pool their judgments into a shared reliability score (Krippendorff's α).</div>
+        <div class="mod-function">→ Krippendorff's α · per-axis (Generation, Fluency, 4 Likert)</div>
+      </div>
+
+    </div>
+
+    <h4 style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--ink-dim);letter-spacing:0.1em;margin:1.5rem 0 0.8rem;text-transform:uppercase;">③ Error Analysis</h4>
+    <div class="module-grid">
+
+      <div class="module-card mod-c">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">แห</div>
+            <div class="mod-roman">Hae · Cast Net</div>
+          </div>
+          <div class="mod-name-en">formerly<br>Sieve</div>
+        </div>
+        <div class="mod-file">hae_error.py</div>
+        <div class="mod-desc">A traditional Lanna cast net — thrown wide to cover a large area, then pulled in to separate catch from water. แห casts a wide net over all model outputs and pulls up only the failures: worst-k rows by chrf_avg, prompt-sensitivity outliers (high chrf_diff), tone-flip cases, construction-loss, and CD-drop.</div>
+        <div class="mod-function">→ worst-k · tone-flip · construction-loss · CD-drop</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 5. Meta Modules -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 5</span>
+      <span class="section-title">Meta Modules</span>
+      <span class="section-thai">แอ๊บ · Shared Utilities</span>
+    </div>
+    <p class="section-desc">The people and laws that hold the community together — bridge-keepers, headmen, stones, and moral codes.</p>
+    <span class="module-layer-label lbl-meta">ab_meta/ · formerly lannakit</span>
+
+    <div class="module-grid">
+
+      <div class="module-card mod-meta">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ปู่จ๋าน</div>
+            <div class="mod-roman">Pu Jan · Lay Minister</div>
+          </div>
+          <div class="mod-name-en">formerly<br>io.py</div>
+        </div>
+        <div class="mod-file">pujan_io.py</div>
+        <div class="mod-desc">ปู่จ๋าน is the Lanna lay minister — a former monk who bridges the temple and the villagers, carrying messages, coordinating rituals, and facilitating exchange between realms. ปู่จ๋าน handles all JSONL read/write and hashing: the bridge that carries data in and out of the system.</div>
+        <div class="mod-function">→ JSONL read/write · SHA-256 hashing helpers</div>
+      </div>
+
+      <div class="module-card mod-meta">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ป้อหลวง</div>
+            <div class="mod-roman">Po Luang · Village Headman</div>
+          </div>
+          <div class="mod-name-en">formerly<br>orchestrate.py</div>
+        </div>
+        <div class="mod-file">poluang_orchestrate.py</div>
+        <div class="mod-desc">ป้อหลวง is the Northern Thai village headman — a fatherly figure who settles disputes, leads community activities, and serves as the official liaison between government and people. ป้อหลวง leads the entire pipeline, reading YAML configs and coordinating all layers in sequence.</div>
+        <div class="mod-function">→ lanna-fon run entrypoint · pipeline orchestration</div>
+      </div>
+
+      <div class="module-card mod-meta">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">มะหิน</div>
+            <div class="mod-roman">Mahin · Stone</div>
+          </div>
+          <div class="mod-name-en">formerly<br>loomstone.py</div>
+        </div>
+        <div class="mod-file">mahin_seed.py</div>
+        <div class="mod-desc">มะหิน is the Lanna word for stone — solid, unchanging, the same every time. มะหิน is the deterministic seed manager: seed_all(42) seeds numpy, torch, random, and transformers in one call. The stone anchor that makes experiments reproducible.</div>
+        <div class="mod-function">→ Loomstone.seed_all() · default seed = 42</div>
+      </div>
+
+      <div class="module-card mod-meta">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ปี้</div>
+            <div class="mod-roman">Pee · Tag / Mark</div>
+          </div>
+          <div class="mod-name-en">formerly<br>manifest.py</div>
+        </div>
+        <div class="mod-file">pee_manifest.py</div>
+        <div class="mod-desc">ปี้ is a mark or tag left to identify ownership or provenance — a small stamp of identity. Every experiment produces a ปี้: a manifest stamped with config, data hashes, git SHA, tooling versions, and hardware. No output is accepted without its tag.</div>
+        <div class="mod-function">→ run manifest · config + SHA + timestamps</div>
+      </div>
+
+      <div class="module-card mod-meta">
+        <div class="mod-header">
+          <div>
+            <div class="mod-name-thai">ฮีต</div>
+            <div class="mod-roman">Heet · Customary Law</div>
+          </div>
+          <div class="mod-name-en">formerly<br>schema.py</div>
+        </div>
+        <div class="mod-file">heet_schema.py</div>
+        <div class="mod-desc">ฮีต (from Pali charita) are the customary moral codes and traditions passed down through Lanna generations — the "right way" of living. ฮีต defines the Pydantic schemas that enforce the right structure for every data row: DatasetRow, OutputRow, Annotation, Provenance. No row is accepted unless it follows the ฮีต.</div>
+        <div class="mod-function">→ Pydantic schemas · canonical data types</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 6. CLI Showcase -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 6</span>
+      <span class="section-title">Real-Use CLI Session</span>
+      <span class="section-thai">การใช้งานจริง</span>
+    </div>
+    <p class="section-desc">A complete end-to-end benchmark run using the Lanna CLI names — from raw sheet to final gap score.</p>
+
+    <div class="cli-showcase">
+      <div class="cli-titlebar">
+        <span class="cli-dot r"></span><span class="cli-dot y"></span><span class="cli-dot g"></span>
+        <span class="cli-titlebar-label">northern-thai-llm · terminal</span>
+      </div>
+      <div class="cli-body">
+<span class="cmt"># ── Layer A · ข่วง · Build the corpus ───────────────────────────</span>
+<span class="prompt">$</span> <span class="cmd-a">lanna-khuang</span> <span class="arg">build --sheet lanna_master.xlsx --out data/</span>
+<span class="out">  salung_builder   ✓  lannacore_dataset.jsonl  (1120 rows)</span>
+<span class="out">  tok_splitter     ✓  test=200  dev=100  train=820</span>
+
+<span class="prompt">$</span> <span class="cmd-a">lanna-khuang</span> <span class="arg">validate data/lannacore_dataset.jsonl</span>
+<span class="out-ok">  huuk_validator   ✓  All rows comply with Heet (0 violations)</span>
+
+<span class="cmt"># ── Layer B · ครัวไฟ · Run adaptation ────────────────────────────</span>
+<span class="prompt">$</span> <span class="cmd-b">lanna-kruafai</span> <span class="arg">register</span>
+<span class="out">  khantok_registry   9 models loaded (5 no-finetune · 4 fine-tunable)</span>
+
+<span class="prompt">$</span> <span class="cmd-b">lanna-kruafai</span> <span class="arg">infer --model gpt4o --condition zero-shot \
+    --data data/lannacore_test.jsonl --prompt-index 1 \
+    --out runs/exp1/outputs/gpt4o-zs-p1.jsonl</span>
+<span class="out">  mui_inference/api   ✓  200 items · 45.1s</span>
+
+<span class="prompt">$</span> <span class="cmd-b">lanna-kruafai</span> <span class="arg">train --base typhoon2 \
+    --train data/lannacore_train.jsonl --r 8 --alpha 16 \
+    --out adapters/typhoon2-lora-v1/</span>
+<span class="out">  sin_finetuner   ✓  LoRA adapter saved · train_manifest.json stamped</span>
+
+<span class="cmt"># ── Layer C · จ่อฟ้า · Evaluate ──────────────────────────────────</span>
+<span class="prompt">$</span> <span class="cmd-c">lanna-jorfa</span> <span class="arg">score \
+    --hypotheses runs/exp1/outputs/gpt4o-zs-p1.jsonl \
+    --references data/lannacore_test.jsonl \
+    --out runs/exp1/reports/gpt4o-zs-triple.json</span>
+<span class="out">  traiphum_multiref → kaew_aggregator</span>
+<span class="out">  chrf_max=42.1  chrf_avg=38.7  chrf_diff=3.4</span>
+
+<span class="prompt">$</span> <span class="cmd-c">lanna-jorfa</span> <span class="arg">gap --reports 'runs/exp1/reports/*.json' \
+    --out runs/exp1/reports/gap.json</span>
+<span class="out">  pong_gap   G = 8.3  (STD chrf_avg − NTD chrf_avg)</span>
+
+<span class="prompt">$</span> <span class="cmd-c">lanna-jorfa</span> <span class="arg">human alpha \
+    --annotations runs/exp1/human/responses/ \
+    --out runs/exp1/human/alpha.json</span>
+<span class="out">  hompoi_agreement   α_generation=0.81  α_tone=0.74  α_construction=0.69</span>
+
+<span class="cmt"># ── Orchestrate all steps at once with Fon ───────────────────────</span>
+<span class="prompt">$</span> <span class="cmd-meta">lanna-fon</span> <span class="arg">run --pipeline pipelines/paper1_full.yaml</span>
+<span class="out">  🕊️  Lanna Fon — orchestrating the benchmark with grace</span>
+<span class="out-tick">  ✔  khuang.build        (2.3s)</span>
+<span class="out-tick">  ✔  khuang.validate     (0.8s)</span>
+<span class="out-tick">  ✔  kruafai.infer ×27   (892s)</span>
+<span class="out-tick">  ✔  kruafai.train       (3401s)</span>
+<span class="out-tick">  ✔  jorfa.score ×27     (341s)</span>
+<span class="out-tick">  ✔  jorfa.gap           (0.4s)</span>
+<span class="out-tick">  ✔  jorfa.facets        (2.1s)</span>
+<span class="out-tick">  ✔  jorfa.human         (1.2s)</span>
+<span class="out-tick">  ✔  jorfa.errors        (3.6s)</span>
+<span class="out">  ✨  All steps complete. Reports in runs/exp1/</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Alphabetical Index -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 7</span>
+      <span class="section-title">Alphabetical Index</span>
+      <span class="section-thai">ดัชนีตามตัวอักษร</span>
+    </div>
+    <p class="section-desc">All 22 Lanna codenames in romanisation order, for quick reference.</p>
+
+    <table class="alpha-table">
+      <thead>
+        <tr>
+          <th>Romanisation</th><th>Thai</th><th>Layer</th><th>File</th><th>Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="td-roman">Ab</td><td class="td-thai tag-meta">แอ๊บ</td><td><span class="tag-meta">meta</span></td><td><span class="td-file">ab_meta/</span></td><td class="td-role">Small lidded container — shared utilities package</td></tr>
+        <tr><td class="td-roman">Bai Lan</td><td class="td-thai tag-c">ใบลาน</td><td><span class="tag-c">C</span></td><td><span class="td-file">bailan_form.py</span></td><td class="td-role">Palm-leaf manuscript — human eval form generator</td></tr>
+        <tr><td class="td-roman">Chalu</td><td class="td-thai tag-b">ฉลุ</td><td><span class="tag-b">B</span></td><td><span class="td-file">chalu_templater.py</span></td><td class="td-role">Carved stencil — prompt templating</td></tr>
+        <tr><td class="td-roman">Fon</td><td class="td-thai tag-meta">ฟ้อน</td><td><span class="tag-meta">CLI</span></td><td><span class="td-file">lanna-fon</span></td><td class="td-role">Traditional dance — pipeline orchestration</td></tr>
+        <tr><td class="td-roman">Hae</td><td class="td-thai tag-c">แห</td><td><span class="tag-c">C</span></td><td><span class="td-file">hae_error.py</span></td><td class="td-role">Cast net — error analysis</td></tr>
+        <tr><td class="td-roman">Heet</td><td class="td-thai tag-meta">ฮีต</td><td><span class="tag-meta">meta</span></td><td><span class="td-file">heet_schema.py</span></td><td class="td-role">Customary law — Pydantic data schemas</td></tr>
+        <tr><td class="td-roman">Hom Poi</td><td class="td-thai tag-c">ฮอมปอย</td><td><span class="tag-c">C</span></td><td><span class="td-file">hompoi_agreement.py</span></td><td class="td-role">Communal contribution — Krippendorff's α</td></tr>
+        <tr><td class="td-roman">Huuk</td><td class="td-thai tag-a">หูก</td><td><span class="tag-a">A</span></td><td><span class="td-file">huuk_validator.py</span></td><td class="td-role">Loom — schema validator</td></tr>
+        <tr><td class="td-roman">Jor Fa</td><td class="td-thai tag-c">จ่อฟ้า</td><td><span class="tag-c">C pkg</span></td><td><span class="td-file">lanna_jorfa/</span></td><td class="td-role">Sky finial — evaluation layer package</td></tr>
+        <tr><td class="td-roman">Kaew</td><td class="td-thai tag-c">แก้ว</td><td><span class="tag-c">C</span></td><td><span class="td-file">kaew_aggregator.py</span></td><td class="td-role">Crystal — Triple-ChrF aggregator</td></tr>
+        <tr><td class="td-roman">Khan Tok</td><td class="td-thai tag-b">ขันโตก</td><td><span class="tag-b">B</span></td><td><span class="td-file">khantok_registry.py</span></td><td class="td-role">Serving bowl — 9-model registry</td></tr>
+        <tr><td class="td-roman">Khuang</td><td class="td-thai tag-a">ข่วง</td><td><span class="tag-a">A pkg</span></td><td><span class="td-file">lanna_khuang/</span></td><td class="td-role">Royal courtyard — data foundation layer</td></tr>
+        <tr><td class="td-roman">Krua Fai</td><td class="td-thai tag-b">ครัวไฟ</td><td><span class="tag-b">B pkg</span></td><td><span class="td-file">lanna_kruafai/</span></td><td class="td-role">Traditional kitchen — adaptation layer</td></tr>
+        <tr><td class="td-roman">Mahin</td><td class="td-thai tag-meta">มะหิน</td><td><span class="tag-meta">meta</span></td><td><span class="td-file">mahin_seed.py</span></td><td class="td-role">Stone (Lanna) — deterministic seed manager</td></tr>
+        <tr><td class="td-roman">Mui</td><td class="td-thai tag-b">มุย</td><td><span class="tag-b">B</span></td><td><span class="td-file">mui_inference/</span></td><td class="td-role">Hammer — inference runner</td></tr>
+        <tr><td class="td-roman">Pee</td><td class="td-thai tag-meta">ปี้</td><td><span class="tag-meta">meta</span></td><td><span class="td-file">pee_manifest.py</span></td><td class="td-role">Tag / mark — run manifest</td></tr>
+        <tr><td class="td-roman">Po Luang</td><td class="td-thai tag-meta">ป้อหลวง</td><td><span class="tag-meta">meta</span></td><td><span class="td-file">poluang_orchestrate.py</span></td><td class="td-role">Village headman — pipeline coordinator</td></tr>
+        <tr><td class="td-roman">Pong</td><td class="td-thai tag-c">ป่อง</td><td><span class="tag-c">C</span></td><td><span class="td-file">pong_gap.py</span></td><td class="td-role">Gap / interval — Dialect Gap Score G</td></tr>
+        <tr><td class="td-roman">Pu Jan</td><td class="td-thai tag-meta">ปู่จ๋าน</td><td><span class="tag-meta">meta</span></td><td><span class="td-file">pujan_io.py</span></td><td class="td-role">Lay minister — JSONL I/O bridge</td></tr>
+        <tr><td class="td-roman">Rak</td><td class="td-thai tag-a">รัก</td><td><span class="tag-a">A</span></td><td><span class="td-file">rak_annotator.py</span></td><td class="td-role">Lacquer — annotation codebook applicator</td></tr>
+        <tr><td class="td-roman">Salung</td><td class="td-thai tag-a">สลุง</td><td><span class="tag-a">A</span></td><td><span class="td-file">salung_builder.py</span></td><td class="td-role">Water bowl — JSONL builder</td></tr>
+        <tr><td class="td-roman">Sathu</td><td class="td-thai tag-c">สาธุ</td><td><span class="tag-c">C</span></td><td><span class="td-file">sathu_robustness.py</span></td><td class="td-role">Amen / affirmation — 3P prompt robustness</td></tr>
+        <tr><td class="td-roman">Sin</td><td class="td-thai tag-b">ซิ่น</td><td><span class="tag-b">B</span></td><td><span class="td-file">sin_finetuner.py</span></td><td class="td-role">Traditional skirt — LoRA fine-tuner</td></tr>
+        <tr><td class="td-roman">Tae</td><td class="td-thai tag-c">แตะ</td><td><span class="tag-c">C</span></td><td><span class="td-file">tae_slicer.py</span></td><td class="td-role">Woven bamboo panel — LannaFacets slicer</td></tr>
+        <tr><td class="td-roman">Tok</td><td class="td-thai tag-a">ตอก</td><td><span class="tag-a">A</span></td><td><span class="td-file">tok_splitter.py</span></td><td class="td-role">Bamboo strip — train/dev/test partitioner</td></tr>
+        <tr><td class="td-roman">Trai Phum</td><td class="td-thai tag-c">ไตรภูมิ</td><td><span class="tag-c">C</span></td><td><span class="td-file">traiphum_multiref.py</span></td><td class="td-role">Three realms — Lanna MultiRef scorer</td></tr>
+        <tr><td class="td-roman">Tung</td><td class="td-thai tag-a">ตุง</td><td><span class="tag-a">A</span></td><td><span class="td-file">tung_definer.py</span></td><td class="td-role">Ritual flag — LannaFacets field definitions</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 8. Placement in the Paper -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">§ 8</span>
+      <span class="section-title">Where Paper Readers See This</span>
+      <span class="section-thai">ตำแหน่งในงานวิจัย</span>
+    </div>
+    <p class="section-desc">The public API names (LannaBase, LannaAdapt-s, LannaEval) remain unchanged in the paper. The Lanna codenames appear in three places, at increasing depth.</p>
+
+    <div class="callout">
+      <strong>Core principle:</strong> Paper readers get a taste in the main text. Those who want depth go to supplementary materials or the repository. No page limit is exceeded.
+    </div>
+
+    <div class="placement-box">
+      <div class="placement-row">
+        <div class="placement-venue">Main paper<br>(compact table)</div>
+        <div class="placement-content">A small table in the Implementation section or Appendix A listing the 3 layer packages + 6–8 key modules. One line each: Thai · Romanisation · English meaning · Software role. Gives reviewers immediate cultural flavour without bulk.</div>
+      </div>
+      <div class="placement-row">
+        <div class="placement-venue">Supplementary<br>materials (PDF)</div>
+        <div class="placement-content">Full glossary with 2–3 sentence cultural descriptions for all 27 codenames. Formatted as a 2-page reference document. Readers who are curious about cultural grounding can access it without cluttering the main paper.</div>
+      </div>
+      <div class="placement-row">
+        <div class="placement-venue">Repository<br>GLOSSARY.md</div>
+        <div class="placement-content">This document — full descriptions, Thai script, romanisation, cultural role, software function, and file name. Cross-referenced from the paper's Data &amp; Code Availability statement: "A glossary of Lanna codenames is provided in GLOSSARY.md."</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>
